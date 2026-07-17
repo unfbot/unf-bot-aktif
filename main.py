@@ -23,9 +23,9 @@ def keep_alive():
 # --------------------------------
 
 # --- AYARLAR ---
-FIVEM_IP = "185.137.98.64"
+FIVEM_IP = "45.15.41.238"
 FIVEM_PORT = "30120"  
-FIVEM_SERVER_API = "https://servers.fivem.net/servers/detail/bdxrrb4"
+FIVEM_SERVER_API = "https://servers.fivem.net/servers/detail/xlz3aqx"
 
 EKIP_ISMI = "UNFORTUNE"
 SUNUCU_ISMI = "PGUN"
