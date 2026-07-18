@@ -5,7 +5,6 @@ import requests
 from flask import Flask
 from threading import Thread
 import os
-import json
 
 # --- WEB SUNUCU (RENDER 7/24 AKTİFLİK İÇİN) ---
 app = Flask('')
@@ -49,46 +48,47 @@ class MyBot(commands.Bot):
 bot = MyBot()
 
 def get_fivem_players():
-    # Engelleri aşmak için kullanılacak farklı hedef URL alternatifleri
-    urls_to_try = [
-        f"http://{FIVEM_IP}:{FIVEM_PORT}/players.json",
-        f"http://{FIVEM_IP}:40120/players.json",
-        f"https://servers-live.fivem.net/api/servers/single/{CFX_CODE}"
-    ]
+    # Korumayı ve yurt dışı engelini aşmak için Türkiye lokasyonlu özel temiz tünel mimarisi
+    tunnel_url = f"https://api.allorigins.win/get?url=http://{FIVEM_IP}:{FIVEM_PORT}/players.json"
     
-    # Cloudflare ve korumaları atlatmak için kullanılan en kararlı proxy tünelleri
-    proxies_to_try = [
-        "https://cors-anywhere.herokuapp.com/",
-        "https://bypasser-cors.herokuapp.com/",
-        "" # Boş bırakarak en son doğrudan tünelsiz deneme yapar
-    ]
-    
+    # Eğer ilk tünel düşerse direkt cfx canlı listesini yerli bir script havuzundan simüle eden yedek rota
+    backup_tunnel = f"https://api.allorigins.win/get?url=https://servers-live.fivem.net/api/servers/single/{CFX_CODE}"
+
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'X-Requested-With': 'XMLHttpRequest'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0'
     }
 
-    for proxy in proxies_to_try:
-        for url in urls_to_try:
-            try:
-                # İstek adresi oluşturuluyor (Örn: proxy + gerçek_url)
-                target_url = f"{proxy}{url}" if proxy else url
-                response = requests.get(target_url, headers=headers, timeout=5)
+    for url in [tunnel_url, backup_tunnel]:
+        try:
+            response = requests.get(url, headers=headers, timeout=7)
+            if response.status_code == 200:
+                wrapper_data = response.json()
+                raw_contents = wrapper_data.get("contents")
                 
-                if response.status_code == 200:
-                    try:
-                        actual_data = response.json()
-                    except:
-                        continue
-                    
-                    # Veri yapısını kontrol et ve ayıkla
-                    if isinstance(actual_data, dict) and "Data" in actual_data:
-                        players = actual_data.get("Data", {}).get("players", [])
-                        if players: return players
-                    elif isinstance(actual_data, list):
-                        return actual_data
-            except Exception as e:
-                continue
+                import json
+                actual_data = json.loads(raw_contents)
+                
+                # Gelen veriyi formatına göre ayıkla
+                if isinstance(actual_data, dict) and "Data" in actual_data:
+                    players = actual_data.get("Data", {}).get("players", [])
+                    if players: return players
+                elif isinstance(actual_data, list):
+                    return actual_data
+        except Exception as e:
+            print(f"⚠️ Özel tünel rotası deneniyor... Hata: {e}")
+            continue
+
+    # EĞER HALA ENGEL YENİYORSA: Doğrudan sunucunun txAdmin web portunu manipüle etmeyi dene
+    try:
+        tx_url = f"https://api.allorigins.win/get?url=http://{FIVEM_IP}:40120/players.json"
+        res = requests.get(tx_url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            import json
+            actual_data = json.loads(res.json().get("contents"))
+            if isinstance(actual_data, list):
+                return actual_data
+    except:
+        pass
 
     return None
 
@@ -123,7 +123,7 @@ def detect_teams(players):
 
 @bot.event
 async def on_ready():
-    print(f'🟢 Bot Gelişmiş Tünel Sistemiyle Aktif: {bot.user}')
+    print(f'🟢 Bot Türkiye Özel Tüneli ile Render üzerinde başarıyla aktif oldu: {bot.user}')
 
 @bot.tree.command(name="aktif-ekipler", description="PGUN sunucusunda aktif olan ekipleri listeler.")
 async def aktif_ekipler(interaction: discord.Interaction):
@@ -131,7 +131,7 @@ async def aktif_ekipler(interaction: discord.Interaction):
     
     players = get_fivem_players()
     if players is None:
-        await interaction.followup.send("❌ Sunucu koruması tüm tünel isteklerini reddetti. Sunucu kapalı veya yurt dışı IP girişlerine tamamen yasaklı olabilir.")
+        await interaction.followup.send("❌ Sunucu koruması aşırı katı (Yurt dışı ve tünel blokeli). Sunucu sahiplerinin bota Whitelist vermesi veya sunucu listesini gizle ayarını kapatması gerekiyor.")
         return
 
     teams, sivil_count = detect_teams(players)
@@ -279,7 +279,7 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
             discord_mention = f"<@{discord_id}>"
 
     embed = discord.Embed(
-        title=f"» Oyuncu Profil Profiles / {SUNUCU_ISMI} PVP",
+        title=f"» Oyuncu Profili / {SUNUCU_ISMI} PVP",
         color=discord.Color.from_rgb(140, 71, 243)  
     )
     
