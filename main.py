@@ -25,7 +25,8 @@ def keep_alive():
 # --- AYARLAR ---
 FIVEM_IP = "45.15.41.238"
 FIVEM_PORT = "30120"  
-FIVEM_SERVER_API = "https://servers.fivem.net/servers/detail/xlz3aqx"
+# DÜZELTME: Doğru ve resmi Canlı FiveM API adresi tanımlandı
+FIVEM_SERVER_API = "https://servers-live.fivem.net/api/servers/single/xlz3aqx"
 
 EKIP_ISMI = "UNFORTUNE"
 SUNUCU_ISMI = "PGUN"
@@ -48,24 +49,29 @@ class MyBot(commands.Bot):
 bot = MyBot()
 
 def get_fivem_players():
+    # 1. Aşama: Doğrudan IP ve Port üzerinden veri çekmeyi dene
     try:
         url = f"http://{FIVEM_IP}:{FIVEM_PORT}/players.json"
         response = requests.get(url, timeout=4)
         if response.status_code == 200:
             return response.json()
     except Exception as e:
-        print(f"IP ve Port üzerinden veri çekilemedi, yedek sisteme geçiliyor: {e}")
+        print(f"⚠️ IP ve Port üzerinden veri çekilemedi, yedek sisteme geçiliyor: {e}")
 
+    # 2. Aşama: Resmi FiveM API üzerinden veri çekmeyi dene (DÜZELTİLDİ)
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
-        response = requests.get(FIVEM_SERVER_API, headers=headers, timeout=5)
+        response = requests.get(FIVEM_SERVER_API, headers=headers, timeout=6)
         if response.status_code == 200:
             data = response.json()
+            # Resmi API'de oyuncular Data -> players altında liste olarak döner
             return data.get("Data", {}).get("players", [])
+        else:
+            print(f"⚠️ Yedek API HTTP Hatası Döndürdü: {response.status_code}")
     except Exception as e:
-        print(f"Yedek FiveM API bağlantısı da başarısız oldu: {e}")
+        print(f"❌ Yedek FiveM API bağlantısı da başarısız oldu: {e}")
         
     return None
 
@@ -108,7 +114,7 @@ async def aktif_ekipler(interaction: discord.Interaction):
     
     players = get_fivem_players()
     if players is None:
-        await interaction.followup.send("❌ Sunucu verilerine ulaşılamadı. Lütfen portun doğruluğunu veya sunucu durumunu kontrol edin.")
+        await interaction.followup.send("❌ Sunucu verilerine ulaşılamadı. Sunucu kapalı olabilir veya API istekleri engelleniyor.")
         return
 
     teams, sivil_count = detect_teams(players)
@@ -190,8 +196,6 @@ async def ekip_id(interaction: discord.Interaction, ekip_ismi: str):
         
     await interaction.followup.send(embed=embed, view=view)
 
-
-# --- 🎥 GÖRSELDEKİ GELİŞMİŞ ID SORGU SİSTEMİ ---
 @bot.tree.command(name="idsorgu", description="Sunucudaki bir oyuncuyu detaylı sorgular.")
 @app_commands.describe(
     sorgu_turu="Sorgu türünü seçin (id, steam, discord)",
@@ -213,7 +217,6 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
     target_player = None
     deger_clean = deger.strip().lower()
 
-    # Oyuncuyu arama algoritması
     for p in players:
         p_identifiers = p.get("identifiers", [])
         
@@ -222,14 +225,12 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
                 target_player = p
                 break
         elif sorgu_turu == "steam":
-            # steam:hex yapısını kontrol eder
             for ident in p_identifiers:
                 if ident.startswith("steam:") and deger_clean in ident.lower():
                     target_player = p
                     break
             if target_player: break
         elif sorgu_turu == "discord":
-            # discord:id yapısını kontrol eder
             for ident in p_identifiers:
                 if ident.startswith("discord:") and deger_clean in ident.lower():
                     target_player = p
@@ -240,7 +241,6 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
         await interaction.followup.send(f"❌ Belirtilen kriterlere uygun (`{sorgu_turu}: {deger}`) aktif bir oyuncu sunucuda bulunamadı.")
         return
 
-    # Oyuncu verilerini ayrıştırma
     p_id = target_player.get("id", "Bilinmiyor")
     p_name = target_player.get("name", "Bilinmiyor")
     p_ping = target_player.get("ping", "0")
@@ -256,18 +256,16 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
         elif ident.startswith("license:"):
             license_id = ident.replace("license:", "")
             if len(license_id) > 15:
-                license_id = f"{license_id[:15]}..." # Görseldeki gibi uzunsa kırpıyoruz
+                license_id = f"{license_id[:15]}..." 
         elif ident.startswith("discord:"):
             discord_id = ident.replace("discord:", "")
             discord_mention = f"<@{discord_id}>"
 
-    # Görsel şablona birebir sadık kalınarak hazırlanan Embed tasarımı
     embed = discord.Embed(
         title=f"» Oyuncu Profili / {SUNUCU_ISMI} PVP",
-        color=discord.Color.from_rgb(140, 71, 243)  # Görseldeki mor/efflatun tonu
+        color=discord.Color.from_rgb(140, 71, 243)  
     )
     
-    # Bilgilerin şablon hizalaması
     info_text = (
         f"```md\n"
         f"ID         : {p_id}\n"
@@ -280,10 +278,7 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
     )
     embed.description = info_text
     
-    # Discord Hesabı alanı
     embed.add_field(name="🔗 Discord Hesabı:", value=discord_mention, inline=False)
-    
-    # Alt bilgi alanları ve butonlar
     embed.add_field(name="Oyuncunun Yanına Git", value="Sunucuya hızlı bağlanmak için butonu kullanabilirsin.", inline=False)
     
     view = discord.ui.View()
@@ -293,11 +288,9 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
         style=discord.ButtonStyle.link
     ))
     
-    # Eğer oyuncunun Discord profil resmi varsa ekleme çabası (Discord API kısıtlılığı nedeniyle yoksa varsayılan kalır)
     embed.set_thumbnail(url="https://images.gamebanana.com/img/ico/sprays/5cfa320092289.png") 
 
     await interaction.followup.send(embed=embed, view=view)
-
 
 keep_alive()
 bot.run(BOT_TOKEN)
