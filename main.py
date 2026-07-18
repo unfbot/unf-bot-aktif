@@ -26,7 +26,7 @@ def keep_alive():
 FIVEM_IP = "45.15.41.238"
 FIVEM_PORT = "30120"  
 # DÜZELTME: Doğru ve resmi Canlı FiveM API adresi tanımlandı
-FIVEM_SERVER_API = "https://servers-live.fivem.net/api/servers/single/xlz3aqx"
+FIVEM_SERVER_API = "https://servers.fivem.net/servers/detail/xlz3aqx"
 
 EKIP_ISMI = "UNFORTUNE"
 SUNUCU_ISMI = "PGUN"
@@ -49,27 +49,40 @@ class MyBot(commands.Bot):
 bot = MyBot()
 
 def get_fivem_players():
-    # 1. Aşama: Doğrudan IP ve Port üzerinden veri çekmeyi dene
+    # 1. AŞAMA: txAdmin API üzerinden veri çekmeyi dene (DDoS Korumalarını Aşmak İçin En Etkili Yol)
+    try:
+        # Eğer sunucunuzun txAdmin portu 40120'den farklıysa burayı değiştirebilirsiniz.
+        tx_port = "40120" 
+        tx_url = f"http://{FIVEM_IP}:{tx_port}/players.json"
+        response = requests.get(tx_url, timeout=4)
+        if response.status_code == 200:
+            print("🟢 Veriler txAdmin API üzerinden başarıyla çekildi.")
+            return response.json()
+    except Exception as e:
+        print(f"⚠️ txAdmin portu üzerinden veri çekilemedi: {e}")
+
+    # 2. AŞAMA: Doğrudan IP ve Port üzerinden veri çekmeyi dene
     try:
         url = f"http://{FIVEM_IP}:{FIVEM_PORT}/players.json"
         response = requests.get(url, timeout=4)
         if response.status_code == 200:
+            print("🟢 Veriler doğrudan IP/Port üzerinden başarıyla çekildi.")
             return response.json()
     except Exception as e:
-        print(f"⚠️ IP ve Port üzerinden veri çekilemedi, yedek sisteme geçiliyor: {e}")
+        print(f"⚠️ Standart IP/Port üzerinden veri çekilemedi: {e}")
 
-    # 2. Aşama: Resmi FiveM API üzerinden veri çekmeyi dene (DÜZELTİLDİ)
+    # 3. AŞAMA: Yedek Resmi FiveM API üzerinden dene
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
-        response = requests.get(FIVEM_SERVER_API, headers=headers, timeout=6)
+        response = requests.get(FIVEM_SERVER_API, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            # Resmi API'de oyuncular Data -> players altında liste olarak döner
+            print("🟢 Veriler yedek FiveM API üzerinden başarıyla çekildi.")
             return data.get("Data", {}).get("players", [])
         else:
-            print(f"⚠️ Yedek API HTTP Hatası Döndürdü: {response.status_code}")
+            print(f"⚠️ Yedek API HTTP Hatası Döndürdü: {response.status_code}. Sunucu cfx kodu (xlz3aqx) değişmiş olabilir.")
     except Exception as e:
         print(f"❌ Yedek FiveM API bağlantısı da başarısız oldu: {e}")
         
@@ -114,7 +127,7 @@ async def aktif_ekipler(interaction: discord.Interaction):
     
     players = get_fivem_players()
     if players is None:
-        await interaction.followup.send("❌ Sunucu verilerine ulaşılamadı. Sunucu kapalı olabilir veya API istekleri engelleniyor.")
+        await interaction.followup.send("❌ Sunucu verilerine hiçbir yöntemle ulaşılamadı. Sunucu kapalı olabilir veya botun IP adresi sunucu firewall'u tarafından tamamen engelleniyor.")
         return
 
     teams, sivil_count = detect_teams(players)
