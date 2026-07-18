@@ -5,6 +5,7 @@ import requests
 from flask import Flask
 from threading import Thread
 import os
+import json
 
 # --- WEB SUNUCU (RENDER 7/24 AKTİFLİK İÇİN) ---
 app = Flask('')
@@ -25,8 +26,7 @@ def keep_alive():
 # --- AYARLAR ---
 FIVEM_IP = "45.15.41.238"
 FIVEM_PORT = "30120"  
-# DÜZELTME: Doğru ve resmi Canlı FiveM API adresi tanımlandı
-FIVEM_SERVER_API = "https://servers-live.fivem.net/api/servers/single/xlz3aqx"
+CFX_CODE = "xlz3aqx"
 
 EKIP_ISMI = "UNFORTUNE"
 SUNUCU_ISMI = "PGUN"
@@ -49,43 +49,47 @@ class MyBot(commands.Bot):
 bot = MyBot()
 
 def get_fivem_players():
-    # 1. AŞAMA: txAdmin API üzerinden veri çekmeyi dene (DDoS Korumalarını Aşmak İçin En Etkili Yol)
-    try:
-        # Eğer sunucunuzun txAdmin portu 40120'den farklıysa burayı değiştirebilirsiniz.
-        tx_port = "40120" 
-        tx_url = f"http://{FIVEM_IP}:{tx_port}/players.json"
-        response = requests.get(tx_url, timeout=4)
-        if response.status_code == 200:
-            print("🟢 Veriler txAdmin API üzerinden başarıyla çekildi.")
-            return response.json()
-    except Exception as e:
-        print(f"⚠️ txAdmin portu üzerinden veri çekilemedi: {e}")
+    # Engelleri aşmak için kullanılacak farklı hedef URL alternatifleri
+    urls_to_try = [
+        f"http://{FIVEM_IP}:{FIVEM_PORT}/players.json",
+        f"http://{FIVEM_IP}:40120/players.json",
+        f"https://servers-live.fivem.net/api/servers/single/{CFX_CODE}"
+    ]
+    
+    # Cloudflare ve korumaları atlatmak için kullanılan en kararlı proxy tünelleri
+    proxies_to_try = [
+        "https://cors-anywhere.herokuapp.com/",
+        "https://bypasser-cors.herokuapp.com/",
+        "" # Boş bırakarak en son doğrudan tünelsiz deneme yapar
+    ]
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'X-Requested-With': 'XMLHttpRequest'
+    }
 
-    # 2. AŞAMA: Doğrudan IP ve Port üzerinden veri çekmeyi dene
-    try:
-        url = f"http://{FIVEM_IP}:{FIVEM_PORT}/players.json"
-        response = requests.get(url, timeout=4)
-        if response.status_code == 200:
-            print("🟢 Veriler doğrudan IP/Port üzerinden başarıyla çekildi.")
-            return response.json()
-    except Exception as e:
-        print(f"⚠️ Standart IP/Port üzerinden veri çekilemedi: {e}")
+    for proxy in proxies_to_try:
+        for url in urls_to_try:
+            try:
+                # İstek adresi oluşturuluyor (Örn: proxy + gerçek_url)
+                target_url = f"{proxy}{url}" if proxy else url
+                response = requests.get(target_url, headers=headers, timeout=5)
+                
+                if response.status_code == 200:
+                    try:
+                        actual_data = response.json()
+                    except:
+                        continue
+                    
+                    # Veri yapısını kontrol et ve ayıkla
+                    if isinstance(actual_data, dict) and "Data" in actual_data:
+                        players = actual_data.get("Data", {}).get("players", [])
+                        if players: return players
+                    elif isinstance(actual_data, list):
+                        return actual_data
+            except Exception as e:
+                continue
 
-    # 3. AŞAMA: Yedek Resmi FiveM API üzerinden dene
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        response = requests.get(FIVEM_SERVER_API, headers=headers, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            print("🟢 Veriler yedek FiveM API üzerinden başarıyla çekildi.")
-            return data.get("Data", {}).get("players", [])
-        else:
-            print(f"⚠️ Yedek API HTTP Hatası Döndürdü: {response.status_code}. Sunucu cfx kodu (xlz3aqx) değişmiş olabilir.")
-    except Exception as e:
-        print(f"❌ Yedek FiveM API bağlantısı da başarısız oldu: {e}")
-        
     return None
 
 def detect_teams(players):
@@ -119,7 +123,7 @@ def detect_teams(players):
 
 @bot.event
 async def on_ready():
-    print(f'🟢 Bot Render üzerinde ve Discord\'da başarıyla aktif oldu: {bot.user}')
+    print(f'🟢 Bot Gelişmiş Tünel Sistemiyle Aktif: {bot.user}')
 
 @bot.tree.command(name="aktif-ekipler", description="PGUN sunucusunda aktif olan ekipleri listeler.")
 async def aktif_ekipler(interaction: discord.Interaction):
@@ -127,7 +131,7 @@ async def aktif_ekipler(interaction: discord.Interaction):
     
     players = get_fivem_players()
     if players is None:
-        await interaction.followup.send("❌ Sunucu verilerine hiçbir yöntemle ulaşılamadı. Sunucu kapalı olabilir veya botun IP adresi sunucu firewall'u tarafından tamamen engelleniyor.")
+        await interaction.followup.send("❌ Sunucu koruması tüm tünel isteklerini reddetti. Sunucu kapalı veya yurt dışı IP girişlerine tamamen yasaklı olabilir.")
         return
 
     teams, sivil_count = detect_teams(players)
@@ -163,7 +167,7 @@ async def ekip_id(interaction: discord.Interaction, ekip_ismi: str):
     
     players = get_fivem_players()
     if players is None:
-        await interaction.followup.send("❌ Sunucu verileri çekilemedi.")
+        await interaction.followup.send("❌ Sunucu verileri şu an çekilemiyor.")
         return
         
     ekip_players = []
@@ -275,7 +279,7 @@ async def id_sorgu(interaction: discord.Interaction, sorgu_turu: str, deger: str
             discord_mention = f"<@{discord_id}>"
 
     embed = discord.Embed(
-        title=f"» Oyuncu Profili / {SUNUCU_ISMI} PVP",
+        title=f"» Oyuncu Profil Profiles / {SUNUCU_ISMI} PVP",
         color=discord.Color.from_rgb(140, 71, 243)  
     )
     
