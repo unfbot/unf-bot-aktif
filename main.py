@@ -26,7 +26,7 @@ def keep_alive():
 FIVEM_IP = "45.15.41.238"
 FIVEM_PORT = "30120"  
 # DÜZELTME: Doğru ve resmi Canlı FiveM API adresi tanımlandı
-FIVEM_SERVER_API = "https://servers.fivem.net/servers/detail/xlz3aqx"
+FIVEM_SERVER_API = "https://servers-live.fivem.net/api/servers/single/xlz3aqx"
 
 EKIP_ISMI = "UNFORTUNE"
 SUNUCU_ISMI = "PGUN"
